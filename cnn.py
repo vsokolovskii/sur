@@ -16,13 +16,13 @@ config = dict(
     learning_rate=1e-3,
     weight_decay=1e-2,
     dropout=0.4,
-    num_workers=0,
-    wandb_run_desc="pos_weight1",
+    wandb_run_desc="deeper_cnn",
     train_data_desc_file="pngs-train.csv",
-    test_data_desc_file="pngs-test.csv",
-    optimizer=torch.optim.Adagrad,
-    optimizer_name='Adagrad',
-    wandb_mode='offline')
+    test_data_desc_file="pngs-dev.csv",
+    optimizer=torch.optim.RMSprop,
+    optimizer_name='RMS',
+    momentum=0,
+    wandb_mode='online')
 
 
 if os.uname()[1].startswith('supergpu'):
@@ -57,26 +57,33 @@ class PngsDataset(torch.utils.data.Dataset):
 class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5, padding=2)
-        self.bnl1 = nn.BatchNorm2d(num_features=10)
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
+        self.bnl1 = nn.BatchNorm2d(num_features=16)
         self.relu1 = nn.ReLU()
         self.pool1 = nn.MaxPool2d(kernel_size=2)
-        self.do1 = nn.Dropout(0.15)
+        self.do1 = nn.Dropout(0.2)
 
-        self.conv2 = nn.Conv2d(10, 18, kernel_size=5, padding=2)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.bnl2 = nn.BatchNorm2d(num_features=32)
         self.relu2 = nn.ReLU()
         self.pool2 = nn.MaxPool2d(kernel_size=2)
-        self.do2 = nn.Dropout(0.4)
+        self.do2 = nn.Dropout(0.3)
 
-        self.conv3 = nn.Conv2d(18, 32, kernel_size=5, padding=2)
-        self.bnl2 = nn.BatchNorm2d(num_features=32)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.bnl3 = nn.BatchNorm2d(num_features=64)
         self.relu3 = nn.ReLU()
         self.pool3 = nn.MaxPool2d(kernel_size=2)
         self.do3 = nn.Dropout(0.4)
-        
-        self.fc1 = nn.Linear(in_features=32 * (10 ** 2), out_features=256)
+
+        self.conv4 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.bnl4 = nn.BatchNorm2d(num_features=128)
+        self.relu4 = nn.ReLU()
+        self.pool4 = nn.MaxPool2d(kernel_size=2)
+        self.do4 = nn.Dropout(0.5)
+
+        self.fc1 = nn.Linear(in_features=128 * (5 ** 2), out_features=256)
         self.gelu = nn.GELU()
-        self.fc2 = nn.Linear(in_features=256, out_features=1)
+        self.fc2 = nn.Linear(in_features=256, out_features=32)
 
     def forward(self, x):
         x = x[:, None, :, :]
@@ -85,59 +92,70 @@ class CNN(nn.Module):
         x = self.bnl1(x)
         x = self.relu1(x)
         x = self.pool1(x)
-        s = self.do1(x)
+        x = self.do1(x)
 
         x = self.conv2(x)
+        x = self.bnl2(x)
         x = self.relu2(x)
         x = self.pool2(x)
         x = self.do2(x)
 
         x = self.conv3(x)
+        x = self.bnl3(x)
         x = self.relu3(x)
         x = self.pool3(x)
         x = self.do3(x)
 
-        x = x.view(-1, 32 * 10 * 10)
+        x = self.conv4(x)
+        x = self.bnl4(x)
+        x = self.relu4(x)
+        x = self.pool4(x)
+        x = self.do4(x)
+
+        x = x.view(-1, 128 * 5 * 5)
         x = self.fc1(x)
         x = self.gelu(x)
         x = self.fc2(x)
 
         return x
+
     
 
-def train(model, device, train_loader, optimizer, epoch):
+def train(model, device, train_loader, optimizer, epoch, wandb_mode):
     model.train()
     acc_loss = 0
     for _, (data, target) in enumerate(train_loader):
         data, target = data.type(torch.FloatTensor).to(device), target.type(torch.FloatTensor).to(device)
         optimizer.zero_grad()
-        output = model(data).flatten()
-        loss = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([6]).to(device))
-        loss = loss(output, target)
+        output = model(data)
+        loss = nn.CrossEntropyLoss()(output, target.long())
         acc_loss += loss
         loss.backward()
         optimizer.step()
     # calculate loss for the whole epoch
     loss = acc_loss / len(train_loader)
     print(f"Epoch: {epoch} Training Loss: {loss.item()}")
-    wandb.log({'Training loss': loss.item()}, step=epoch)
+    if wandb_mode != 'disabled':
+        wandb.log({'Training loss': loss.item()}, step=epoch, mode=wandb_mode)
 
-def validate(model, device, valid_loader, epoch):
+def validate(model, device, valid_loader, epoch, wandb_mode):
     model.eval()
     val_loss = 0
     correct = 0
     with torch.no_grad():
         for data, target in valid_loader:
             data, target = data.type(torch.FloatTensor).to(device), target.type(torch.FloatTensor).to(device)
-            output = model(data).flatten()
-            val_loss += torch.nn.BCEWithLogitsLoss()(output, target).item()  # sum up batch loss
-            output = torch.sigmoid(output)
-            pred = output.round()  # get the index of the max log-probability
+            output = model(data)
+            val_loss += nn.CrossEntropyLoss()(output, target.long()).item()  # sum up batch loss
+            _, pred = torch.max(output, 1)
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     val_loss /= len(valid_loader.dataset)
-    wandb.log({'Validation loss': val_loss, 'Accuracy': correct/len(valid_loader.dataset)}, step=epoch)
-    print(f"Test set: Average loss: {val_loss:.4f}, Accuracy: {correct}/{len(valid_loader.dataset)} ({100. * correct / len(valid_loader.dataset):.0f}%)")
+    accuracy = correct/len(valid_loader.dataset)
+    if wandb_mode != 'disabled':
+        wandb.log({'Validation loss': val_loss, 'Accuracy': accuracy}, step=epoch, mode=wandb_mode)
+    print(f"Test set: Average loss: {val_loss:.4f}, Accuracy: {correct}/{len(valid_loader.dataset)} ({100. * accuracy:.0f}%)")
+    return val_loss, accuracy
 
 def make(config):
     transform = A.Compose([
@@ -149,14 +167,14 @@ def make(config):
         A.RandomBrightnessContrast(p=0.2),
     ])
     # create data loaders
-    train_loader = torch.utils.data.DataLoader(PngsDataset('pngs-train.csv', transform=transform), batch_size=config['batch_size'], shuffle=True)
-    val_loader = torch.utils.data.DataLoader(PngsDataset('pngs-test.csv', transform=transform), batch_size=config['batch_size'], shuffle=False)
+    train_loader = torch.utils.data.DataLoader(PngsDataset(config['train_data_desc_file'], transform=transform), batch_size=config['batch_size'], shuffle=True)
+    val_loader = torch.utils.data.DataLoader(PngsDataset(config['test_data_desc_file'], transform=transform), batch_size=config['batch_size'], shuffle=False)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # create model
     model = CNN().to(device)
     # create optimizer
-    optimizer = config['optimizer'](model.parameters(), lr=config['learning_rate'], weight_decay=config['weight_decay'])
+    optimizer = config['optimizer'](model.parameters(), lr=config['learning_rate'], weight_decay=config['weight_decay'], momentum=config['momentum'])
 
     return model, device, train_loader, val_loader, optimizer
 
@@ -171,8 +189,8 @@ def main(show_image=False):
         model, device, train_loader, val_loader, optimizer = make(config)
         # train model
         for epoch in range(1, config['epochs'] + 1):
-            train(model, device, train_loader, optimizer, epoch)
-            validate(model, device, val_loader, epoch)
+            train(model, device, train_loader, optimizer, epoch, config['wandb_mode'])
+            validate(model, device, val_loader, epoch, config['wandb_mode'])
             # save modekj
             torch.save(model.state_dict(), 'model.pt')
             # save model to wandb

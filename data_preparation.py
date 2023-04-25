@@ -1,53 +1,46 @@
 import pandas as pd
 import os
+import glob
 
-# find all directories ending with 'train'
-def find_train_dirs(path):
-    train_dirs = []
-    for root, dirs, files in os.walk(path):
-        for dir in dirs:
-            if dir.endswith('train'):
-                train_dirs.append(os.path.join(root, dir))
-    return train_dirs
+def data_description_create(dir_path, mode='train'):
+    # prepare the data frames
+    df_png = {'file': [], 'label': []}
+    df_wav = {'file': [], 'label': []}
 
-def find_test_dirs(path):
-    test_dirs = []
-    for root, dirs, files in os.walk(path):
-        for dir in dirs:
-            if dir.endswith('dev'):
-                test_dirs.append(os.path.join(root, dir))
-    return test_dirs
+    png_files = glob.glob(os.path.join(dir_path, '**/*.png'), recursive=True)
+    wav_files = glob.glob(os.path.join(dir_path, '**/*.wav'), recursive=True)
 
-def data_description_create(dirs, mode='train'):
-    # read the data description file
-    df_non_png, df_tg_png = pd.DataFrame(), pd.DataFrame()
-    df_non_wav, df_tg_wav = pd.DataFrame(), pd.DataFrame()
-    for dir in dirs:
-        if os.path.basename(dir).startswith('non'):
-            # get absolute paths of png files in the directory
-            png_files = [os.path.join(dir, file) for file in os.listdir(dir) if file.endswith('.png')]
-            # get absolute paths of wav files in the directory
-            wav_files = [os.path.join(dir, file) for file in os.listdir(dir) if file.endswith('.wav')]
-            #pandas read list to dataframe
-            df_non_png['file'] = png_files
-            df_non_png['label'] = 0
-            df_non_wav['file'] = wav_files
-            df_non_wav['label'] = 0
-        else:
-            png_files = [os.path.join(dir, file) for file in os.listdir(dir) if file.endswith('.png')]
-            # get absolute paths of wav files in the directory
-            wav_files = [os.path.join(dir, file) for file in os.listdir(dir) if file.endswith('.wav')]
-            df_tg_png['file'] = png_files
-            df_tg_png['label'] = 1
-            df_tg_wav['file'] = wav_files
-            df_tg_wav['label'] = 1
+    for file in png_files:
+        label = file.split('/')[-2]
+        df_png['file'].append(file)
+        df_png['label'].append(label)
 
-    df = pd.concat([df_non_png, df_tg_png], axis=0)
-    df1 = pd.concat([df_non_wav, df_tg_wav], axis=0)
-    df.to_csv(f'pngs-{mode}.csv', index=False)
-    df1.to_csv(f'wavs-{mode}.csv', index=False)
+    for file in wav_files:
+        label = file.split('/')[-2]
+        df_wav['file'].append(file)
+        df_wav['label'].append(label)
+
+    
+    df_png = pd.DataFrame(df_png)
+    df_wav = pd.DataFrame(df_wav)
+    # save the data frames
+    if mode == 'train':
+        df_png.to_csv(os.path.join(os.getcwd(), 'pngs-train.csv'), index=False)
+        df_wav.to_csv(os.path.join(os.getcwd(), 'wav-train.csv'), index=False)
+    elif mode == 'dev':
+        df_png.to_csv(os.path.join(os.getcwd(), 'pngs-dev.csv'), index=False)
+        df_wav.to_csv(os.path.join(os.getcwd(), 'wav-dev.csv'), index=False)
+    
+    
 
 if __name__ == '__main__':
-    train_dirs = find_train_dirs(os.getcwd())
-    data_description_create(train_dirs, 'train')
-    data_description_create(find_test_dirs(os.getcwd()), 'test')
+    dataset_dir = os.path.join(os.getcwd(), 'dataset')
+    train_dir = os.path.join(dataset_dir, 'train')
+    dev_dir = os.path.join(dataset_dir, 'dev')
+    
+    if not os.path.exists(train_dir) or not os.path.exists(dev_dir):
+        raise Exception('Dataset directories do not exist')
+    
+    data_description_create(train_dir, mode='train')
+    data_description_create(dev_dir, mode='dev')
+

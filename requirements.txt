@@ -3,3 +3,5 @@ pandas==1.5.3
 torch==1.13.1
 torchvision==0.14.1
 wandb==0.13.10
+matplotlib==3.7.1
+wandb-osh==1.0.4
