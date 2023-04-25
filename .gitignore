@@ -3,3 +3,5 @@ dataset/
 *.csv
 wandb/
 *.pt
+__pycache__/
+```

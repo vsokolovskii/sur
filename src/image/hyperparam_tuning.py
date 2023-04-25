@@ -23,17 +23,18 @@ def objective(trial, config):
     
     # Create model, device, train_loader, val_loader, and optimizer
     model, device, train_loader, val_loader, optimizer = make(config)
-
+    validations = []
     # Train and validate model
     for epoch in range(1, config['epochs'] + 1):
         train(model, device, train_loader, optimizer, epoch, config['wandb_mode'])
-        validate(model, device, val_loader, epoch, config['wandb_mode'])
+        val_loss, val_acc = validate(model, device, val_loader, epoch, config['wandb_mode'])
+        validations.append(val_loss)
 
-    # Calculate validation performance
-    val_loss, val_acc = validate(model, device, val_loader, epoch)
+    # calculate average validation loss of last 50 epochs
+    avg_loss = sum(validations[-50:]) / 50
 
     # Return the validation loss as the objective for Optuna to minimize
-    return val_loss
+    return avg_loss
 
 
 def main():
@@ -45,8 +46,8 @@ def main():
     weight_decay=1e-2,
     dropout=0.4,
     wandb_run_desc="deeper_cnn",
-    train_data_desc_file="pngs-train.csv",
-    test_data_desc_file="pngs-dev.csv",
+    train_data_desc_file="../pngs-train.csv",
+    test_data_desc_file="../pngs-dev.csv",
     optimizer=torch.optim.RMSprop,
     optimizer_name='RMS',
     momentum=0,
