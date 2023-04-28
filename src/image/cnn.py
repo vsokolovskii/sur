@@ -4,19 +4,22 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms as T
 import matplotlib.pyplot as plt
+import numpy as np
+import os
 
 import pandas as pd
 import cv2
 import os
 import albumentations as A
+import glob
 
 config = dict(
-    epochs=2000,
-    batch_size=4,
-    learning_rate=1e-3,
-    weight_decay=1e-2,
-    dropout=0.4,
-    wandb_run_desc="deeper_cnn",
+    epochs=15000,
+    batch_size=32,
+    learning_rate=4.5e-4,
+    weight_decay=9e-3,
+    dropout=0.55,
+    wandb_run_desc="valid_no_aug",
     train_data_desc_file="../pngs-train.csv",
     test_data_desc_file="../pngs-dev.csv",
     optimizer=torch.optim.RMSprop,
@@ -53,6 +56,18 @@ class PngsDataset(torch.utils.data.Dataset):
 
         return (image, y_label)
 
+class PngsTestDataset(torch.utils.data.Dataset):
+    def __init__(self, folder):
+        self.image_paths = glob.glob(folder + '/*.png')
+
+    def __len__(self):
+        return len(self.image_paths)
+    
+    def __getitem__(self, idx):
+        image_file = self.image_paths[idx]
+        image = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
+
+        return os.path.basename(image_file.split('.')[0]), image
 
 class CNN(nn.Module):
     def __init__(self):
@@ -136,7 +151,11 @@ def train(model, device, train_loader, optimizer, epoch, wandb_mode):
     loss = acc_loss / len(train_loader)
     print(f"Epoch: {epoch} Training Loss: {loss.item()}")
     if wandb_mode != 'disabled':
-        wandb.log({'Training loss': loss.item()}, step=epoch, mode=wandb_mode)
+        wandb.log({'Training loss': loss.item()}, step=epoch)
+    # save model checkpoint each 5000 epochs
+    if epoch % 4000 == 0:
+        torch.save(model.state_dict(), f"model_{epoch}.pth")
+
 
 def validate(model, device, valid_loader, epoch, wandb_mode):
     model.eval()
@@ -153,7 +172,7 @@ def validate(model, device, valid_loader, epoch, wandb_mode):
     val_loss /= len(valid_loader.dataset)
     accuracy = correct/len(valid_loader.dataset)
     if wandb_mode != 'disabled':
-        wandb.log({'Validation loss': val_loss, 'Accuracy': accuracy}, step=epoch, mode=wandb_mode)
+        wandb.log({'Validation loss': val_loss, 'Accuracy': accuracy}, step=epoch)
     print(f"Test set: Average loss: {val_loss:.4f}, Accuracy: {correct}/{len(valid_loader.dataset)} ({100. * accuracy:.0f}%)")
     return val_loss, accuracy
 
@@ -168,7 +187,7 @@ def make(config):
     ])
     # create data loaders
     train_loader = torch.utils.data.DataLoader(PngsDataset(config['train_data_desc_file'], transform=transform), batch_size=config['batch_size'], shuffle=True)
-    val_loader = torch.utils.data.DataLoader(PngsDataset(config['test_data_desc_file'], transform=transform), batch_size=config['batch_size'], shuffle=False)
+    val_loader = torch.utils.data.DataLoader(PngsDataset(config['test_data_desc_file']), batch_size=config['batch_size'], shuffle=False)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # create model
@@ -179,7 +198,27 @@ def make(config):
     return model, device, train_loader, val_loader, optimizer
 
 
-def main(show_image=False):
+def main(show_image=False, inference=False):
+    if inference:
+        # load model from checkpoint
+        model = CNN()
+        model.load_state_dict(torch.load('model.pt'))
+        model.eval()
+        # load image from directory
+        images = "/Users/vladislav/School/SUR/sur/dataset/dev/1/"
+        # create test loader
+        test_loader = torch.utils.data.DataLoader(PngsTestDataset(images), batch_size=1, shuffle=False)
+        with open("image_results.txt", "w") as f:
+            for file, image in test_loader:
+                image = image.type(torch.FloatTensor)
+                print(image.shape, type(image), image.dtype)
+                output = model(image)
+                _, pred = torch.max(output, 1)
+                print(type(file))
+                f.write(f"{file[0]} {int(pred)} ")
+                f.write("NaN " * 31 + "\n")
+        return
+
     run_name = f"lr-{config['learning_rate']}_l2-{config['weight_decay']}_dropout-{config['dropout']}_batch-{config['batch_size']}_optim-{str(config['optimizer_name'])}_run_{config['wandb_run_desc']}"
     # initialize wandb
     with wandb.init(project='sur', mode=config['wandb_mode'], name=run_name):
@@ -197,7 +236,7 @@ def main(show_image=False):
             wandb.save('model.pt')
             if config['wandb_mode'] == 'offline':
                 trigger_sync()
-        
+    
 
 if __name__ == '__main__':
-    main(show_image=False)
+    main(show_image=False, inference=False)
