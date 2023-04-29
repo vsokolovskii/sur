@@ -1,5 +1,8 @@
 # SUR
 
+# Results of the inference
+`results.txt`
+
 ## Setup
 1. Open the root directory of the project
 2. Place `dataset` folder to the current folder

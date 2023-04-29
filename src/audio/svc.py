@@ -21,6 +21,8 @@ import pickle
 import glob
 import argparse
 
+# https://github.com/mathigatti/silence-removal
+# b9e385af2ba3964f564562c33e23f0b31835321c
 class VoiceActivityDetector:
 
     def __init__(self):
