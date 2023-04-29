@@ -62,10 +62,6 @@ if __name__ == "__main__":
     image_pred = pd.read_csv('image/image_results.csv', header=None, sep=';')
     audio_pred = pd.read_csv('audio/audio_results.csv', header=None, sep=';')
     match = 0
-    print("Image prediction: ", len(image_pred))
-    print("Audio prediction: ", len(audio_pred))
-    print("Image coulmns: ", len(image_pred.columns))
-    print("Audio coulmns: ", len(audio_pred.columns))
 
     # join the two dataframes by 0 column
     df = pd.merge(image_pred, audio_pred, on=0)
@@ -89,5 +85,5 @@ if __name__ == "__main__":
                 f.write(f" {prob}")
             f.write("\n")
 
-        print("Match: ", match)
+        print(f"Both systems agreed on {match}/{len(df)} predictions")
  

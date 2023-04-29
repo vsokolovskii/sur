@@ -116,7 +116,7 @@ def train():
     # Evaluate the SVC
     y_pred = svc.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
-    print("Accuracy:", accuracy)
+    print("Accuracy of SVC system (audio) on dev set:", accuracy)
 
 
 def inference():
