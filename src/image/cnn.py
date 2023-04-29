@@ -1,17 +1,15 @@
 import wandb
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torchvision import datasets, transforms as T
-import matplotlib.pyplot as plt
-import numpy as np
 import os
+from tqdm import tqdm
 
 import pandas as pd
 import cv2
 import os
 import albumentations as A
 import glob
+import argparse
 
 config = dict(
     epochs=15000,
@@ -99,6 +97,7 @@ class CNN(nn.Module):
         self.fc1 = nn.Linear(in_features=128 * (5 ** 2), out_features=256)
         self.gelu = nn.GELU()
         self.fc2 = nn.Linear(in_features=256, out_features=32)
+        self.softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, x):
         x = x[:, None, :, :]
@@ -131,6 +130,8 @@ class CNN(nn.Module):
         x = self.fc1(x)
         x = self.gelu(x)
         x = self.fc2(x)
+        # softmax
+        x = self.softmax(x)
 
         return x
 
@@ -202,21 +203,21 @@ def main(show_image=False, inference=False):
     if inference:
         # load model from checkpoint
         model = CNN()
-        model.load_state_dict(torch.load('model.pt'))
+        model.load_state_dict(torch.load('model_12000.pth', map_location=torch.device('cpu')))
         model.eval()
         # load image from directory
-        images = "/Users/vladislav/School/SUR/sur/dataset/dev/1/"
+        images = "/Users/vladislav/School/SUR/sur/dataset/eval/"
         # create test loader
         test_loader = torch.utils.data.DataLoader(PngsTestDataset(images), batch_size=1, shuffle=False)
-        with open("image_results.txt", "w") as f:
-            for file, image in test_loader:
+        with open("image_results.csv", "w") as f:
+            for file, image in tqdm(test_loader):
                 image = image.type(torch.FloatTensor)
-                print(image.shape, type(image), image.dtype)
                 output = model(image)
                 _, pred = torch.max(output, 1)
-                print(type(file))
-                f.write(f"{file[0]} {int(pred)} ")
-                f.write("NaN " * 31 + "\n")
+                f.write(f"{file[0]}; {int(pred)}")
+                for prob in output[0][1:]:
+                    f.write(f"; {prob.item()}")
+                f.write("\n")
         return
 
     run_name = f"lr-{config['learning_rate']}_l2-{config['weight_decay']}_dropout-{config['dropout']}_batch-{config['batch_size']}_optim-{str(config['optimizer_name'])}_run_{config['wandb_run_desc']}"
@@ -239,4 +240,13 @@ def main(show_image=False, inference=False):
     
 
 if __name__ == '__main__':
-    main(show_image=False, inference=False)
+    # parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--train', action='store_true', help='train the model')
+    parser.add_argument('--inference', action='store_true', help='run inference')
+
+    args = parser.parse_args()
+    if args.train:
+        main()
+    elif args.inference:
+        main(show_image=False, inference=True)
