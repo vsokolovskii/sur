@@ -123,7 +123,7 @@ def inference():
     filename = 'svc_audio.sav'
     svc = pickle.load(open(filename, 'rb'))
 
-    file_paths_test = glob.glob("/Users/vladislav/School/SUR/sur/dataset/eval/*.wav")
+    file_paths_test = glob.glob("../../dataset/eval/*.wav")
 
     basename_test = [os.path.basename(file_path_test).split('.')[0] for file_path_test in file_paths_test]
     # Extract MFCCs

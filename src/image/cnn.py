@@ -64,8 +64,7 @@ class PngsTestDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         image_file = self.image_paths[idx]
         image = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
-
-        return os.path.basename(image_file.split('.')[0]), image
+        return os.path.basename(image_file).split('.')[0], image
 
 class CNN(nn.Module):
     def __init__(self):
@@ -206,7 +205,7 @@ def main(show_image=False, inference=False):
         model.load_state_dict(torch.load('model_12000.pth', map_location=torch.device('cpu')))
         model.eval()
         # load image from directory
-        images = "/Users/vladislav/School/SUR/sur/dataset/eval/"
+        images = "../../dataset/eval/"
         # create test loader
         test_loader = torch.utils.data.DataLoader(PngsTestDataset(images), batch_size=1, shuffle=False)
         with open("image_results.csv", "w") as f:

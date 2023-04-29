@@ -25,11 +25,11 @@ def data_description_create(dir_path, mode='train'):
     df_wav = pd.DataFrame(df_wav)
     # save the data frames
     if mode == 'train':
-        df_png.to_csv(os.path.join(os.getcwd(), 'pngs-train.csv'), index=False)
-        df_wav.to_csv(os.path.join(os.getcwd(), 'wav-train.csv'), index=False)
+        df_png.to_csv(os.path.join(os.getcwd(), 'src', 'pngs-train.csv'), index=False)
+        df_wav.to_csv(os.path.join(os.getcwd(), 'src', 'wav-train.csv'), index=False)
     elif mode == 'dev':
-        df_png.to_csv(os.path.join(os.getcwd(), 'pngs-dev.csv'), index=False)
-        df_wav.to_csv(os.path.join(os.getcwd(), 'wav-dev.csv'), index=False)
+        df_png.to_csv(os.path.join(os.getcwd(), 'src', 'pngs-dev.csv'), index=False)
+        df_wav.to_csv(os.path.join(os.getcwd(), 'src', 'wav-dev.csv'), index=False)
     
     
 
